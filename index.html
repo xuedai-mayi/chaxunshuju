@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学号姓名查询</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input {
+            padding: 8px;
+            margin-bottom: 15px;
+            width: 300px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #result {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>学号/姓名查询</h1>
+    <form id="searchForm">
+        <label for="searchTerm">输入学号或姓名:</label>
+        <input type="text" id="searchTerm" placeholder="请输入学号或姓名">
+        <button type="submit">查询</button>
+    </form>
+    <div id="result"></div>
+
+    <script>
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return unsafe;
+            return unsafe.replace(/[&<>"']/g, function(match) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[match];
+            });
+        }
+
+        // 从JSON文件中读取数据
+        fetch('data.json')
+            .then(response => {
+                if (!response.ok) throw new Error('数据加载失败');
+                return response.json();
+            })
+            .then(data => {
+                // 创建索引
+                const studentNumberMap = {};  // 小写学号映射到原始信息
+                const nameMap = {};           // 小写姓名映射到学号集合
+
+                data.forEach(item => {
+                    // 处理学号索引
+                    const lowerStudentNumber = item.学号.toLowerCase();
+                    studentNumberMap[lowerStudentNumber] = {
+                        originalNumber: item.学号,
+                        name: item.姓名
+                    };
+
+                    // 处理姓名索引
+                    const lowerName = item.姓名.toLowerCase();
+                    if (!nameMap[lowerName]) {
+                        nameMap[lowerName] = new Set();
+                    }
+                    nameMap[lowerName].add(item.学号);
+                });
+
+                const form = document.getElementById('searchForm');
+                const resultDiv = document.getElementById('result');
+
+                form.addEventListener('submit', function(event) {
+                    event.preventDefault();
+                    const searchTerm = document.getElementById('searchTerm').value.trim();
+                    const lowerSearchTerm = searchTerm.toLowerCase();
+                    const escapedSearchTerm = escapeHtml(searchTerm);
+
+                    // 查询结果
+                    const numberMatch = studentNumberMap[lowerSearchTerm];
+                    const nameMatches = nameMap[lowerSearchTerm] || new Set();
+
+                    let resultHtml = '';
+
+                    // 显示学号匹配结果
+                    if (numberMatch) {
+                        resultHtml += `学号 <strong>${escapeHtml(numberMatch.originalNumber)}</strong> ` +
+                                    `对应的姓名是：<strong>${escapeHtml(numberMatch.name)}</strong><br>`;
+                    }
+
+                    // 显示姓名匹配结果
+                    if (nameMatches.size > 0) {
+                        const numbers = Array.from(nameMatches).map(escapeHtml);
+                        resultHtml += `姓名 <strong>${escapedSearchTerm}</strong> ` +
+                                    `对应的学号有：<strong>${numbers.join(', ')}</strong><br>`;
+                    }
+
+                    // 处理无结果情况
+                    if (!resultHtml) {
+                        resultDiv.innerHTML = `<span class="error">未找到 "${escapedSearchTerm}" 的匹配记录</span>`;
+                    } else {
+                        resultDiv.innerHTML = resultHtml;
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('数据加载错误:', error);
+                const resultDiv = document.getElementById('result');
+                resultDiv.innerHTML = `<span class="error">数据加载失败，请检查数据文件</span>`;
+            });
+    </script>
+</body>
+</html>
