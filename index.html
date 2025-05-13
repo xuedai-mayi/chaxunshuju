@@ -112,13 +112,16 @@
                 }
                 
                 // 检查每条记录是否包含必要字段
-                const invalidItems = data.filter(item => 
-                    typeof item.学号 !== 'string' || 
-                    typeof item.姓名 !== 'string'
-                );
+                const invalidItems = [];
+                data.forEach((item, index) => {
+                    if (typeof item.学号 !== 'string' || typeof item.姓名 !== 'string') {
+                        invalidItems.push({ index, item });
+                    }
+                });
                 
                 if (invalidItems.length > 0) {
-                    throw new Error(`数据格式错误：第 ${invalidItems.map((_, i) => i + 1).join(', ')} 条记录缺少必要字段`);
+                    console.error('无效记录:', invalidItems);
+                    throw new Error(`数据格式错误：发现 ${invalidItems.length} 条无效记录（学号或姓名非字符串）`);
                 }
                 
                 // 创建索引
@@ -160,7 +163,7 @@
                             请检查以下内容:<br>
                             1. data.json 文件是否存在于仓库根目录<br>
                             2. 文件格式是否为有效的 JSON 数组<br>
-                            3. 每个对象是否包含 "学号" 和 "姓名" 字段<br>
+                            3. 每个对象是否包含 "学号" 和 "姓名" 字段，且均为字符串类型<br>
                             4. 尝试直接访问: <a href="data.json" target="_blank">data.json</a>
                         </div>
                     </div>
