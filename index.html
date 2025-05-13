@@ -7,43 +7,80 @@
     <style>
         body {
             font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
             padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        form {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         label {
             display: block;
             margin-bottom: 5px;
+            font-weight: bold;
         }
         input {
-            padding: 8px;
+            width: 100%;
+            padding: 10px;
             margin-bottom: 15px;
-            width: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
         }
         button {
             padding: 10px 20px;
             background-color: #4CAF50;
             color: white;
             border: none;
+            border-radius: 4px;
             cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
         }
         #result {
             margin-top: 20px;
-            font-weight: bold;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #e8f5e9;
+            border-left: 4px solid #4CAF50;
         }
         .error {
-            color: red;
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+            color: #b71c1c;
+        }
+        .debug-info {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+            font-size: 14px;
+            white-space: pre-wrap;
         }
     </style>
 </head>
 <body>
-    <h1>学号/姓名查询</h1>
+    <h1>学号/姓名查询系统</h1>
     <form id="searchForm">
         <label for="searchTerm">输入学号或姓名:</label>
-        <input type="text" id="searchTerm" placeholder="请输入学号或姓名">
+        <input type="text" id="searchTerm" placeholder="请输入学号或姓名" required>
         <button type="submit">查询</button>
     </form>
     <div id="result"></div>
 
     <script>
+        // HTML 转义函数，防止 XSS 攻击
         function escapeHtml(unsafe) {
             if (typeof unsafe !== 'string') return unsafe;
             return unsafe.replace(/[&<>"']/g, function(match) {
@@ -57,13 +94,33 @@
             });
         }
 
-        // 从JSON文件中读取数据
-        fetch('data.json')
-            .then(response => {
-                if (!response.ok) throw new Error('数据加载失败');
-                return response.json();
-            })
-            .then(data => {
+        // 加载数据函数
+        async function loadData() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div class="error">数据加载中...</div>';
+            
+            try {
+                // 显示调试信息
+                const debugInfo = {
+                    timestamp: new Date().toISOString(),
+                    location: window.location.href,
+                    userAgent: navigator.userAgent
+                };
+                
+                // 尝试加载数据
+                const response = await fetch('data.json');
+                
+                // 更新调试信息
+                debugInfo.responseStatus = response.status;
+                debugInfo.responseOk = response.ok;
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP错误: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                debugInfo.dataLength = data.length;
+                
                 // 创建索引
                 const studentNumberMap = {};  // 小写学号映射到原始信息
                 const nameMap = {};           // 小写姓名映射到学号集合
@@ -83,48 +140,99 @@
                     }
                     nameMap[lowerName].add(item.学号);
                 });
+                
+                // 数据加载成功，隐藏加载提示
+                resultDiv.innerHTML = '';
+                
+                // 设置表单提交事件
+                setupSearchForm(studentNumberMap, nameMap);
+                
+                // 打印调试信息到控制台
+                console.log('数据加载成功:', debugInfo);
+                
+            } catch (error) {
+                // 错误处理
+                console.error('数据加载失败:', error);
+                
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <strong>数据加载失败</strong><br>
+                        ${error.message}<br><br>
+                        <div class="debug-info">
+                            调试信息: ${new Date().toLocaleString()}<br>
+                            请检查以下内容:<br>
+                            1. data.json 文件是否存在于仓库根目录<br>
+                            2. 文件格式是否为有效的 JSON<br>
+                            3. 尝试直接访问: <a href="data.json" target="_blank">data.json</a>
+                        </div>
+                    </div>
+                `;
+            }
+        }
 
-                const form = document.getElementById('searchForm');
-                const resultDiv = document.getElementById('result');
+        // 设置搜索表单
+        function setupSearchForm(studentNumberMap, nameMap) {
+            const form = document.getElementById('searchForm');
+            const resultDiv = document.getElementById('result');
 
-                form.addEventListener('submit', function(event) {
-                    event.preventDefault();
-                    const searchTerm = document.getElementById('searchTerm').value.trim();
-                    const lowerSearchTerm = searchTerm.toLowerCase();
-                    const escapedSearchTerm = escapeHtml(searchTerm);
+            form.addEventListener('submit', function(event) {
+                event.preventDefault();
+                const searchTerm = document.getElementById('searchTerm').value.trim();
+                
+                if (!searchTerm) {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            请输入学号或姓名进行查询
+                        </div>
+                    `;
+                    return;
+                }
+                
+                const lowerSearchTerm = searchTerm.toLowerCase();
+                const escapedSearchTerm = escapeHtml(searchTerm);
 
-                    // 查询结果
-                    const numberMatch = studentNumberMap[lowerSearchTerm];
-                    const nameMatches = nameMap[lowerSearchTerm] || new Set();
+                // 查询结果
+                const numberMatch = studentNumberMap[lowerSearchTerm];
+                const nameMatches = nameMap[lowerSearchTerm] || new Set();
 
-                    let resultHtml = '';
+                let resultHtml = '';
 
-                    // 显示学号匹配结果
-                    if (numberMatch) {
-                        resultHtml += `学号 <strong>${escapeHtml(numberMatch.originalNumber)}</strong> ` +
-                                    `对应的姓名是：<strong>${escapeHtml(numberMatch.name)}</strong><br>`;
-                    }
+                // 显示学号匹配结果
+                if (numberMatch) {
+                    resultHtml += `
+                        <div class="success">
+                            学号 <strong>${escapeHtml(numberMatch.originalNumber)}</strong> 
+                            对应的姓名是：<strong>${escapeHtml(numberMatch.name)}</strong>
+                        </div>
+                    `;
+                }
 
-                    // 显示姓名匹配结果
-                    if (nameMatches.size > 0) {
-                        const numbers = Array.from(nameMatches).map(escapeHtml);
-                        resultHtml += `姓名 <strong>${escapedSearchTerm}</strong> ` +
-                                    `对应的学号有：<strong>${numbers.join(', ')}</strong><br>`;
-                    }
+                // 显示姓名匹配结果
+                if (nameMatches.size > 0) {
+                    const numbers = Array.from(nameMatches).map(escapeHtml);
+                    resultHtml += `
+                        <div class="success">
+                            姓名 <strong>${escapedSearchTerm}</strong> 
+                            对应的学号有：<strong>${numbers.join(', ')}</strong>
+                        </div>
+                    `;
+                }
 
-                    // 处理无结果情况
-                    if (!resultHtml) {
-                        resultDiv.innerHTML = `<span class="error">未找到 "${escapedSearchTerm}" 的匹配记录</span>`;
-                    } else {
-                        resultDiv.innerHTML = resultHtml;
-                    }
-                });
-            })
-            .catch(error => {
-                console.error('数据加载错误:', error);
-                const resultDiv = document.getElementById('result');
-                resultDiv.innerHTML = `<span class="error">数据加载失败，请检查数据文件</span>`;
+                // 处理无结果情况
+                if (!resultHtml) {
+                    resultHtml = `
+                        <div class="error">
+                            未找到 "${escapedSearchTerm}" 的匹配记录
+                        </div>
+                    `;
+                }
+
+                resultDiv.innerHTML = resultHtml;
             });
+        }
+
+        // 页面加载后执行
+        document.addEventListener('DOMContentLoaded', loadData);
     </script>
 </body>
 </html>
