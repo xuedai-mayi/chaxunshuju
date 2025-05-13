@@ -80,7 +80,6 @@
     <div id="result"></div>
 
     <script>
-        // HTML 转义函数，防止 XSS 攻击
         function escapeHtml(unsafe) {
             if (typeof unsafe !== 'string') return unsafe;
             return unsafe.replace(/[&<>"']/g, function(match) {
@@ -94,64 +93,63 @@
             });
         }
 
-        // 加载数据函数
         async function loadData() {
             const resultDiv = document.getElementById('result');
             resultDiv.innerHTML = '<div class="error">数据加载中...</div>';
             
             try {
-                // 显示调试信息
-                const debugInfo = {
-                    timestamp: new Date().toISOString(),
-                    location: window.location.href,
-                    userAgent: navigator.userAgent
-                };
-                
-                // 尝试加载数据
                 const response = await fetch('data.json');
                 
-                // 更新调试信息
-                debugInfo.responseStatus = response.status;
-                debugInfo.responseOk = response.ok;
-                
                 if (!response.ok) {
-                    throw new Error(`HTTP错误: ${response.status}`);
+                    throw new Error(`HTTP错误 (${response.status}): ${response.statusText}`);
                 }
                 
                 const data = await response.json();
-                debugInfo.dataLength = data.length;
+                
+                // 数据验证
+                if (!Array.isArray(data) || data.length === 0) {
+                    throw new Error('数据格式错误：预期为非空数组');
+                }
+                
+                // 检查每条记录是否包含必要字段
+                const invalidItems = data.filter(item => 
+                    typeof item.学号 !== 'string' || 
+                    typeof item.姓名 !== 'string'
+                );
+                
+                if (invalidItems.length > 0) {
+                    throw new Error(`数据格式错误：第 ${invalidItems.map((_, i) => i + 1).join(', ')} 条记录缺少必要字段`);
+                }
                 
                 // 创建索引
-                const studentNumberMap = {};  // 小写学号映射到原始信息
-                const nameMap = {};           // 小写姓名映射到学号集合
+                const studentNumberMap = {};
+                const nameMap = {};
 
                 data.forEach(item => {
-                    // 处理学号索引
-                    const lowerStudentNumber = item.学号.toLowerCase();
+                    const studentNumber = String(item.学号).trim();
+                    const name = String(item.姓名).trim();
+                    
+                    // 学号索引
+                    const lowerStudentNumber = studentNumber.toLowerCase();
                     studentNumberMap[lowerStudentNumber] = {
-                        originalNumber: item.学号,
-                        name: item.姓名
+                        originalNumber: studentNumber,
+                        name: name
                     };
-
-                    // 处理姓名索引
-                    const lowerName = item.姓名.toLowerCase();
+                    
+                    // 姓名索引
+                    const lowerName = name.toLowerCase();
                     if (!nameMap[lowerName]) {
                         nameMap[lowerName] = new Set();
                     }
-                    nameMap[lowerName].add(item.学号);
+                    nameMap[lowerName].add(studentNumber);
                 });
                 
-                // 数据加载成功，隐藏加载提示
-                resultDiv.innerHTML = '';
-                
-                // 设置表单提交事件
+                resultDiv.innerHTML = ''; // 清除加载提示
                 setupSearchForm(studentNumberMap, nameMap);
                 
-                // 打印调试信息到控制台
-                console.log('数据加载成功:', debugInfo);
+                console.log('数据加载成功，共', data.length, '条记录');
                 
             } catch (error) {
-                // 错误处理
                 console.error('数据加载失败:', error);
                 
                 resultDiv.innerHTML = `
@@ -159,18 +157,17 @@
                         <strong>数据加载失败</strong><br>
                         ${error.message}<br><br>
                         <div class="debug-info">
-                            调试信息: ${new Date().toLocaleString()}<br>
                             请检查以下内容:<br>
                             1. data.json 文件是否存在于仓库根目录<br>
-                            2. 文件格式是否为有效的 JSON<br>
-                            3. 尝试直接访问: <a href="data.json" target="_blank">data.json</a>
+                            2. 文件格式是否为有效的 JSON 数组<br>
+                            3. 每个对象是否包含 "学号" 和 "姓名" 字段<br>
+                            4. 尝试直接访问: <a href="data.json" target="_blank">data.json</a>
                         </div>
                     </div>
                 `;
             }
         }
 
-        // 设置搜索表单
         function setupSearchForm(studentNumberMap, nameMap) {
             const form = document.getElementById('searchForm');
             const resultDiv = document.getElementById('result');
@@ -197,7 +194,6 @@
 
                 let resultHtml = '';
 
-                // 显示学号匹配结果
                 if (numberMatch) {
                     resultHtml += `
                         <div class="success">
@@ -207,7 +203,6 @@
                     `;
                 }
 
-                // 显示姓名匹配结果
                 if (nameMatches.size > 0) {
                     const numbers = Array.from(nameMatches).map(escapeHtml);
                     resultHtml += `
@@ -218,7 +213,6 @@
                     `;
                 }
 
-                // 处理无结果情况
                 if (!resultHtml) {
                     resultHtml = `
                         <div class="error">
@@ -231,7 +225,6 @@
             });
         }
 
-        // 页面加载后执行
         document.addEventListener('DOMContentLoaded', loadData);
     </script>
 </body>
